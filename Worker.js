@@ -713,6 +713,7 @@ body.dark .review-exp-en{background:#052e16;color:#86efac}
 .badge-skipped{background:#fef9c3;color:var(--warning)}
 .badge-flagged{background:#fef3c7;color:#92400e}
 .history-item{display:flex;align-items:center;gap:9px;padding:9px 13px;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:7px;font-size:.86rem}
+.history-item.archived-summary{padding:11px 13px}
 .h-score{font-weight:800;font-size:1rem;color:var(--primary)}
 .h-detail{color:var(--muted);font-size:.78rem;flex:1}
 .h-date{color:var(--muted);font-size:.75rem}
@@ -872,6 +873,7 @@ body.dark .review-exp-en{background:#052e16;color:#86efac}
     <button class="btn btn-success" id="copy-results-btn">📋 Copy Results</button>
     <button class="btn btn-outline" id="print-btn">🖨️ Print Review</button>
     <button class="btn btn-outline" id="results-home-btn">🏠 Home</button>
+    <button class="btn btn-outline" id="export-quiz-btn" title="Download this quiz with all history embedded">💾 Export Quiz HTML</button>
   </div>
 </div>
 
@@ -909,6 +911,7 @@ body.dark .review-exp-en{background:#052e16;color:#86efac}
 <!-- FIX: data island — browser never executes this as JS, so </script> inside
      question text is completely harmless and cannot break the page. -->
 <script type="application/json" id="q-data">${qJson}</script>
+<!-- HISTORY DATA ISLAND (injected by export) --><script type="application/json" id="history-data"></script>
 
 <script>
 // ── Bootstrap: read questions from the safe data island ──────────────────────
@@ -967,7 +970,29 @@ titleEl.addEventListener('keydown', e => {
 
 // ── History persistence ───────────────────────────────────────────────────────
 function saveHistory()  { localStorage.setItem('quiz_history_v3', JSON.stringify(quizHistory)); }
-function loadHistory()  { try { quizHistory = JSON.parse(localStorage.getItem('quiz_history_v3') || '[]'); } catch(e) { quizHistory = []; } }
+function loadHistory()  {
+  try { quizHistory = JSON.parse(localStorage.getItem('quiz_history_v3') || '[]'); } catch(e) { quizHistory = []; }
+  // Load embedded history from data island if present (exported quiz with history)
+  try {
+    const histEl = document.getElementById('history-data');
+    if (histEl && histEl.textContent.trim()) {
+      const embedded = JSON.parse(histEl.textContent);
+      if (Array.isArray(embedded) && embedded.length) {
+        // Merge embedded sessions with localStorage, dedupe by date timestamp
+        const existingDates = new Set(quizHistory.map(r => r.date));
+        embedded.forEach(r => {
+          if (!existingDates.has(r.date)) quizHistory.push(r);
+        });
+        // Sort by date descending (newest first)
+        quizHistory.sort((a, b) => new Date(b.date) - new Date(a.date));
+        // Keep only latest 50
+        if (quizHistory.length > 50) quizHistory = quizHistory.slice(0, 50);
+        // Save merged result back to localStorage
+        saveHistory();
+      }
+    }
+  } catch(e) { /* ignore malformed embedded history */ }
+}
 function clearHistory() {
   if (!confirm('Clear all history?')) return;
   quizHistory = []; saveHistory(); renderStatsPage(); renderHomePage();
@@ -1388,6 +1413,35 @@ function copyResults() {
     .catch(() => showToast('❌ Copy failed'));
 }
 
+// ── Export quiz with embedded history ─────────────────────────────────────────
+function exportQuizWithHistory() {
+  // Ensure latest history is saved
+  saveHistory();
+  
+  // Get the full HTML document source
+  const htmlContent = document.documentElement.outerHTML;
+  
+  // Inject the history data into the history-data island
+  const historyJson = JSON.stringify(quizHistory);
+  const updatedHtml = htmlContent.replace(
+    /(<script type="application\/json" id="history-data">)(.*?)(<\/script>)/i,
+    '$1' + historyJson + '$3'
+  );
+  
+  // Create a Blob and download link
+  const blob = new Blob([updatedHtml], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const titleSafe = (_TITLE || 'Quiz').replace(/[^a-z0-9]+/gi, '_').slice(0, 50);
+  a.href = url;
+  a.download = 'Quiz-' + titleSafe + '-with-history.html';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('✅ Quiz exported with history!');
+}
+
 // ── Review page ───────────────────────────────────────────────────────────────
 function renderReview() {
   const filterSub  = document.getElementById('review-subject').value;
@@ -1481,15 +1535,44 @@ function renderStatsPage() {
     const p = Math.round(st.correct / st.total * 100);
     subEl.innerHTML += '<div class="sub-row"><span class="sub-name">' + esc(sub) + '</span><span class="sub-pct">' + p + '%</span><span class="sub-total">' + st.total + '</span></div>';
   });
-  document.getElementById('stats-history').innerHTML = quizHistory.slice(0, 20).map(r => {
+  
+  // Show full details for last 5 attempts, summarize the rest
+  const recentCount = Math.min(5, quizHistory.length);
+  const olderCount = quizHistory.length - recentCount;
+  let historyHtml = '';
+  
+  // Full details for last 5
+  for (let i = 0; i < recentCount; i++) {
+    const r = quizHistory[i];
     const d   = new Date(r.date);
     const ds  = d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const clr = r.pct >= 80 ? '#16a34a' : r.pct >= 60 ? '#4f46e5' : '#dc2626';
     const mk  = r.totalScore !== undefined ? ' · ' + r.totalScore + '/' + r.maxScore + ' marks' : '';
-    return '<div class="history-item"><span class="h-score" style="color:' + clr + '">' + r.pct + '%</span>' +
-      '<span class="h-detail">' + r.correct + '/' + r.total + mk + ' · ' + esc(r.subject) + '</span>' +
+    const elapsed = r.elapsed ? ' · ' + fmtTime(r.elapsed) : '';
+    historyHtml += '<div class="history-item"><span class="h-score" style="color:' + clr + '">' + r.pct + '%</span>' +
+      '<span class="h-detail">' + r.correct + '/' + r.total + mk + elapsed + ' · ' + esc(r.subject) + '</span>' +
       '<span class="h-date">' + ds + '</span></div>';
-  }).join('');
+  }
+  
+  // Summary for older attempts
+  if (olderCount > 0) {
+    const olderAttempts = quizHistory.slice(recentCount);
+    const oldTotalQ = olderAttempts.reduce((s, r) => s + r.total, 0);
+    const oldCorrect = olderAttempts.reduce((s, r) => s + r.correct, 0);
+    const oldAvgPct = Math.round(olderAttempts.reduce((s, r) => s + r.pct, 0) / olderAttempts.length);
+    const oldBest = Math.max(...olderAttempts.map(r => r.pct));
+    const oldElapsed = olderAttempts.reduce((s, r) => s + (r.elapsed || 0), 0);
+    const firstDate = new Date(olderAttempts[olderAttempts.length - 1].date).toLocaleDateString();
+    const lastDate = new Date(olderAttempts[0].date).toLocaleDateString();
+    
+    historyHtml += '<div class="history-item archived-summary" style="background:linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);border-left:3px solid #9ca3af;">' +
+      '<span class="h-score" style="color:#6b7280">📦 ' + olderCount + '</span>' +
+      '<span class="h-detail" style="flex:2"><strong>' + olderCount + ' older sessions</strong> (' + firstDate + ' to ' + lastDate + ')<br>' +
+        '<span style="font-size:.75rem;color:var(--muted)">Avg: ' + oldAvgPct + '% · Best: ' + oldBest + '% · Qs: ' + oldTotalQ + ' (' + oldCorrect + ' correct) · Time: ' + fmtTime(oldElapsed) + '</span></span>' +
+      '<span class="h-date" style="font-size:.7rem">Archived</span></div>';
+  }
+  
+  document.getElementById('stats-history').innerHTML = historyHtml;
 }
 
 // ── Home page ─────────────────────────────────────────────────────────────────
@@ -1513,15 +1596,31 @@ function renderHomePage() {
     ov.innerHTML = '<p style="font-size:.86rem;color:var(--muted);margin-bottom:10px">Last: <strong style="color:' + color + '">' + last.pct + '%</strong>' + mk + ' — ' + last.correct + '/' + last.total + ' correct</p>' +
       barRow('Correct', last.correct, last.total, '#16a34a') + barRow('Wrong', last.wrong, last.total, '#dc2626') + barRow('Skipped', last.skipped, last.total, '#d97706');
   }
-  document.getElementById('home-recent').innerHTML = quizHistory.length
-    ? quizHistory.slice(0, 5).map(r => {
-        const color = r.pct >= 80 ? '#16a34a' : r.pct >= 60 ? '#4f46e5' : '#dc2626';
-        const mk    = r.totalScore !== undefined ? ' · ' + r.totalScore + ' marks' : '';
-        return '<div class="history-item"><span class="h-score" style="color:' + color + '">' + r.pct + '%</span>' +
-          '<span class="h-detail">' + r.correct + '/' + r.total + mk + ' · ' + esc(r.subject) + '</span>' +
-          '<span class="h-date">' + new Date(r.date).toLocaleDateString() + '</span></div>';
-      }).join('')
-    : '<div style="color:var(--muted);font-size:.86rem">No sessions yet.</div>';
+  
+  // Show full details for last 5 attempts on home page too, with summary if more
+  const recentCount = Math.min(5, quizHistory.length);
+  const olderCount = quizHistory.length - recentCount;
+  let recentHtml = '';
+  
+  for (let i = 0; i < recentCount; i++) {
+    const r = quizHistory[i];
+    const color = r.pct >= 80 ? '#16a34a' : r.pct >= 60 ? '#4f46e5' : '#dc2626';
+    const mk    = r.totalScore !== undefined ? ' · ' + r.totalScore + ' marks' : '';
+    recentHtml += '<div class="history-item"><span class="h-score" style="color:' + color + '">' + r.pct + '%</span>' +
+      '<span class="h-detail">' + r.correct + '/' + r.total + mk + ' · ' + esc(r.subject) + '</span>' +
+      '<span class="h-date">' + new Date(r.date).toLocaleDateString() + '</span></div>';
+  }
+  
+  if (olderCount > 0) {
+    const oldAvgPct = Math.round(quizHistory.slice(recentCount).reduce((s, r) => s + r.pct, 0) / olderCount);
+    const oldBest = Math.max(...quizHistory.slice(recentCount).map(r => r.pct));
+    recentHtml += '<div class="history-item archived-summary" style="background:linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);border-left:3px solid #9ca3af;">' +
+      '<span class="h-score" style="color:#6b7280;font-size:.8rem">📦 ' + olderCount + '</span>' +
+      '<span class="h-detail" style="flex:1"><strong>' + olderCount + ' older</strong> · Avg: ' + oldAvgPct + '% · Best: ' + oldBest + '%</span>' +
+      '<span class="h-date" style="font-size:.7rem">Archived</span></div>';
+  }
+  
+  document.getElementById('home-recent').innerHTML = recentHtml || '<div style="color:var(--muted);font-size:.86rem">No sessions yet.</div>';
 }
 
 function fmtTime(s) { if (!s) return '—'; const m = Math.floor(s / 60); return m > 0 ? m + 'm ' + (s % 60) + 's' : s + 's'; }
@@ -1561,6 +1660,7 @@ document.addEventListener('DOMContentLoaded', () => {
   on('copy-results-btn', 'click', copyResults);
   on('print-btn', 'click', () => window.print());
   on('results-home-btn', 'click', () => showPage('home'));
+  on('export-quiz-btn', 'click', exportQuizWithHistory);
   on('clear-history-btn', 'click', clearHistory);
 
   on('review-subject', 'change', renderReview);
