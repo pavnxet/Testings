@@ -12,7 +12,7 @@ chrome_options.add_argument("--headless")
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
 chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
 # रिमोट रनर (GitHub Actions) में डाउनलोड्स को ब्लॉक होने से रोकने के लिए
 prefs = {"download.default_directory": "/dev/null"} 
@@ -42,56 +42,43 @@ for idx, url in enumerate(urls, 1):
             EC.element_to_be_clickable((By.CSS_SELECTOR, "button.gay-button"))
         )
         
-        # ओरिजिनल विंडो का हैंडल सेव करें
-        original_window = driver.current_window_handle
+        # 🛠️ जादुई स्क्रिप्ट: window.open को हुक/ओवरराइड करना ताकि यह नया टैब खोलने के बजाय लिंक कैप्चर कर ले
+        driver.execute_script("""
+            window.capturedDownloadUrl = null;
+            window.open = function(openUrl) {
+                window.capturedDownloadUrl = openUrl;
+                return null;
+            };
+        """)
         
-        # बटन पर क्लिक करना
-        download_button.click()
+        # बटन पर क्लिक करना (जावास्क्रिप्ट के ज़रिए क्लिक ताकि पॉपअप ब्लॉकर ट्रिगर न हो)
+        driver.execute_script("arguments[0].click();", download_button)
         
-        # लिंक जनरेशन और नए टैब/DOM अपडेट के लिए इंतज़ार
-        time.sleep(6) 
+        # लिंक जनरेशन और वेरिएबल अपडेट के लिए थोड़ा इंतज़ार (5 सेकंड)
+        time.sleep(5) 
         
-        direct_link = None
-
-        # स्थिति 1: चेक करें कि क्या कोई नया टैब या पॉपअप खुला है
-        if len(driver.window_handles) > 1:
-            for handle in driver.window_handles:
-                if handle != original_window:
-                    driver.switch_to.window(handle)
-                    direct_link = driver.current_url
-                    driver.close() # नया टैब बंद करें
-                    driver.switch_to.window(original_window)
-                    break
-
-        # स्थिति 2: अगर नया टैब नहीं खुला, तो DOM में जनरेट हुए डायरेक्ट डाउनलोड लिंक को ढूंढें
+        # इंजेक्ट किए गए वेरिएबल से डायरेक्ट लिंक प्राप्त करना
+        direct_link = driver.execute_script("return window.capturedDownloadUrl;")
+        
+        # बैकअप विकल्प: अगर जावास्क्रिप्ट हुक काम न करे, तो पारंपरिक एंकर टैग्स स्कैन करें
         if not direct_link:
-            # FuckingFast आमतौर पर क्लिक के बाद एक नया एंकर लिंक दिखाता है जिसमें फ़ाइल का नाम या डाउनलोड पाथ होता है
-            # हम ऐसे एंकर टैग्स ढूंढ रहे हैं जिनमें href मौजूद हो और वह ओरिजिनल URL न हो
-            links_in_page = driver.find_elements(By.TAG_CODES if hasattr(By, 'TAG_CODES') else By.TAG_NAME, "a")
+            links_in_page = driver.find_elements(By.TAG_NAME, "a")
             for a_tag in links_in_page:
                 href = a_tag.get_attribute("href")
-                if href and ("fuckingfast.co/files/" in href or "download" in href.lower() or href.endswith('.rar')):
+                if href and ("dl.fuckingfast.co/dl/" in href or href.endswith('.rar')):
                     direct_link = href
                     break
-            
-            # अगर विशेष पैटर्न नहीं मिला, तो अंतिम प्रयास के रूप में क्लास या आईडी के आधार पर ढूंढें
-            if not direct_link:
-                try:
-                    # आप पेज सोर्स देखकर इस स्पेसिफिक सेलेक्टर को बाद में बदल भी सकते हैं
-                    final_download_element = driver.find_element(By.CSS_SELECTOR, "a.download-link, div.download-zone a")
-                    direct_link = final_download_element.get_attribute("href")
-                except:
-                    pass
-
-        # स्थिति 3: अगर कुछ भी नहीं बदला, तो वर्तमान URL को ही बैकअप लें
+                    
+        # अंतिम बैकअप विकल्प: अगर कुछ भी न मिले तो ओरिजिनल यूआरएल का उपयोग करें
         if not direct_link:
             direct_link = driver.current_url
-
-        print(f"✅ Successfully processed part {idx} -> Found Link: {direct_link}")
+            
+        print(f"✅ Successfully processed part {idx} -> Found: {direct_link}")
         output_links.append(direct_link)
         
     except Exception as e:
         print(f"❌ Error on link {idx}: {str(e)}")
+        # बैकअप के तौर पर ओरिजिनल लिंक ही रख रहे हैं ताकि लिस्ट का आर्डर न बिगड़े
         output_links.append(f"FAILED: {url}")
 
 driver.quit()
