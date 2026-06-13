@@ -42,24 +42,56 @@ for idx, url in enumerate(urls, 1):
             EC.element_to_be_clickable((By.CSS_SELECTOR, "button.gay-button"))
         )
         
+        # ओरिजिनल विंडो का हैंडल सेव करें
+        original_window = driver.current_window_handle
+        
         # बटन पर क्लिक करना
         download_button.click()
         
-        # क्लिक के बाद लिंक जनरेशन के लिए 5 सेकंड का होल्ड
-        time.sleep(5) 
+        # लिंक जनरेशन और नए टैब/DOM अपडेट के लिए इंतज़ार
+        time.sleep(6) 
         
-        # व्यवहार जांच: अगर बटन क्लिक के बाद href बदलता है या विंडो चेंज होती है
-        # वर्तमान यूआरएल को चेक करें
-        current_url = driver.current_url
-        
-        # अगर URL नहीं बदला, तो हम पेज का लाइव सोर्स चेक करते हैं कि क्या कोई नया एंकर टैग आया है
-        # या फिर current_url ही डायरेक्ट डाउनलोड लिंक में कन्वर्ट हो चुका है
-        print(f"✅ Successfully processed part {idx}")
-        output_links.append(current_url)
+        direct_link = None
+
+        # स्थिति 1: चेक करें कि क्या कोई नया टैब या पॉपअप खुला है
+        if len(driver.window_handles) > 1:
+            for handle in driver.window_handles:
+                if handle != original_window:
+                    driver.switch_to.window(handle)
+                    direct_link = driver.current_url
+                    driver.close() # नया टैब बंद करें
+                    driver.switch_to.window(original_window)
+                    break
+
+        # स्थिति 2: अगर नया टैब नहीं खुला, तो DOM में जनरेट हुए डायरेक्ट डाउनलोड लिंक को ढूंढें
+        if not direct_link:
+            # FuckingFast आमतौर पर क्लिक के बाद एक नया एंकर लिंक दिखाता है जिसमें फ़ाइल का नाम या डाउनलोड पाथ होता है
+            # हम ऐसे एंकर टैग्स ढूंढ रहे हैं जिनमें href मौजूद हो और वह ओरिजिनल URL न हो
+            links_in_page = driver.find_elements(By.TAG_CODES if hasattr(By, 'TAG_CODES') else By.TAG_NAME, "a")
+            for a_tag in links_in_page:
+                href = a_tag.get_attribute("href")
+                if href and ("fuckingfast.co/files/" in href or "download" in href.lower() or href.endswith('.rar')):
+                    direct_link = href
+                    break
+            
+            # अगर विशेष पैटर्न नहीं मिला, तो अंतिम प्रयास के रूप में क्लास या आईडी के आधार पर ढूंढें
+            if not direct_link:
+                try:
+                    # आप पेज सोर्स देखकर इस स्पेसिफिक सेलेक्टर को बाद में बदल भी सकते हैं
+                    final_download_element = driver.find_element(By.CSS_SELECTOR, "a.download-link, div.download-zone a")
+                    direct_link = final_download_element.get_attribute("href")
+                except:
+                    pass
+
+        # स्थिति 3: अगर कुछ भी नहीं बदला, तो वर्तमान URL को ही बैकअप लें
+        if not direct_link:
+            direct_link = driver.current_url
+
+        print(f"✅ Successfully processed part {idx} -> Found Link: {direct_link}")
+        output_links.append(direct_link)
         
     except Exception as e:
         print(f"❌ Error on link {idx}: {str(e)}")
-        # बैकअप के तौर पर ओरिजिनल लिंक ही रख रहे हैं ताकि लिस्ट का आर्डर न बिगड़े
         output_links.append(f"FAILED: {url}")
 
 driver.quit()
