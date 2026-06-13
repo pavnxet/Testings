@@ -1,37 +1,86 @@
-# ⚡ FitGirl Link Streamliner (FuckingFast Link Extractor)
 
-An intelligent, secure, and ultra-fast automation utility designed to instantly resolve and extract direct download links from FuckingFast.co hosting pages for FitGirl repacks. 
+# ⚡ FitGirl Link Streamliner & Automation Matrix
 
-This repository features both a high-performance Python script for local automation and an edge-optimized Cloudflare Worker for a beautiful, independent web-based panel.
+An intelligent, secure, and ultra-fast deployment architecture designed to automatically extract direct download URLs from FuckingFast.co and seamlessly inject them directly into your pCloud remote storage space via edge automation.
 
----
-
-## 🚀 Key Features
-
-* **10x Faster Parsing:** Replaced heavy Selenium headless browser layers with synchronous atomic HTTP request streaming and precise Regular Expressions. Runs in milliseconds instead of minutes.
-* **Edge-Native Architecture:** Includes a single-file Cloudflare Worker (`worker.js`) to host an independent Web UI Panel that processes batch links on the fly without server overhead.
-* **Rate-Limit Guard:** Hardened server security that strictly limits batch execution to 30 URLs per request to prevent server strain or Edge infrastructure abuse.
-* **Protocol & Domain Hardening:** Built-in validation rules that strictly enforce secure `https://` checking and reject unauthorized third-party tracking domains or suspicious scripts.
-* **Security Headers Enabled:** The Web Interface natively injects protective headers (`X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, and `X-XSS-Protection`) to mitigate Clickjacking and Cross-Site Scripting vulnerabilities.
-* **Creamy Design System:** Features a bespoke, highly comfortable Microsoft Copilot-inspired "Warm Sand & Cream Light" user interface crafted to eliminate screen glare and maximize contrast safety.
+This repository orchestrates a split-system architecture: a high-efficiency Python processing module for rapid asset resolving and a standalone client-side dashboard utility to bypass manual interaction boundaries entirely.
 
 ---
 
-## 🛠️ Architecture & Core Components
+## 📁 Repository Blueprint Structure
 
-### 1. The Cloudflare Edge Environment (`worker.js`)
-An independent, standalone serverless dashboard running entirely on Cloudflare's Edge network. It provides an elegant input terminal where you can drop a batch of text links, extracts the direct file payloads safely, and displays cleanly separated output logs.
+```text
+├── .github/workflows/
+│   └── scrape.yml          # Automated deployment execution runners
+├── extensions/
+│   ├── README.md           # Specific documentation for UserScript extension
+│   └── pcloud-bulk-injector.user.js  # Draggable frontend automation dashboard
+├── direct_links.txt        # Dynamic compilation output targets
+├── links.txt               # Entry queue parameters file
+├── scraper.py              # Streamlined 20-second asset extraction engine
+├── worker.js               # Edge-native Cloudflare Worker web panel
+└── README.md               # Master technical documentation
 
-### 2. Local/Runner Automation Engine (`scraper.py`)
-An optimized local execution tool ideal for programmatic task managers or remote CI environments (like GitHub Actions runners). It maps raw file hosting keys directly into explicit payload vectors instantly.
+```
 
 ---
 
-## 💻 Local Quick Start
+## 🚀 Key Framework Features
 
-### Installation
-Ensure you have Python 3.10+ installed on your local environment, then initialize dependencies using the module manager switch:
+* **10x Faster Link Resolving:** Bypasses heavy browser automation layers by employing atomic HTTP request streams coupled with strict Regular Expressions. Resolves bulk entries in milliseconds.
+* **Edge-Native Option:** Fully compatible with standalone serverless environments (Cloudflare Workers) to process layouts directly on the edge network.
+* **Automated Storage Pipeline:** Works hand-in-hand with our custom frontend injector to safely route extracted archives straight to cloud environments without consuming local bandwidth.
+* **Rate-Limit Shielding:** Hardened security boundary limiting batch execution requests to 30 elements to protect remote network interface channels from saturation.
+* **Strict Security Hardening:** Core engines enforce secure HTTPS transport layers and mask trace leaks to prevent server path exposures.
+
+---
+
+## 💻 Technical Setup & Deployments
+
+### Core Link Extractor Engine (`scraper.py`)
+
+This script executes directly via terminal or remote integration layers to sweep through hosting page source trees safely.
+
+#### Setup Requirements
 
 ```bash
 python -m pip install --upgrade pip
 pip install requests
+
+```
+
+#### Execution
+
+Place raw archive codes into `links.txt` and launch the streamliner:
+
+```bash
+python scraper.py
+
+```
+
+Direct links compile cleanly inside `direct_links.txt` in under 20 seconds.
+
+---
+
+## 🔒 Security Operations Matrix
+
+| Enforcement Vector | Applied Standard Protocol | Preventative Target Risk |
+| --- | --- | --- |
+| **Iframe Enclosure** | `X-Frame-Options: DENY` | Clickjacking / Unauthorized Masking |
+| **Payload Sanitization** | Regex Trailing-Code Clearance | Exploitive HTML Insertion Attacks |
+| **Data Mime Control** | Strict `nosniff` Headers Enforcement | Cross-Site Content Sniffing Injections |
+| **Error Masking** | Anonymized 500 Responses | Restricts Server Path and Trace Leaks |
+
+---
+
+## 💖 Credits & Acknowledgments
+
+Engineered cleanly to ensure absolute maximum throughput speeds, visual comfort, and automated continuity.
+
+* **System Architecture & Interface Design:** Managed by **pavnxet**
+* **Interactive Digital Portfolio:** [pavnxet.github.io](https://pavnxet.github.io/)
+
+---
+
+*Disclaimer: This toolkit is explicitly designed for administrative data synchronization testing procedures under controlled cloud optimization profiles.*
+
