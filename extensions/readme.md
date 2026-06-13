@@ -1,83 +1,53 @@
-# ⚡ FitGirl Link Streamliner & Automation Matrix
+# 🎛️ pCloud Bulk Injector — एक्सटेंशन हब (Hindi & English Master README)
 
-एक इंटेलिजेंट, सुरक्षित और सुपर-फास्ट डिप्लॉयमेंट आर्किटेक्चर जिसे FuckingFast.co से डायरेक्ट डाउनलोड URLs को ऑटोमैटिकली एक्सट्रैक्ट करने और उन्हें एज ऑटोमेशन के जरिए सीधे आपके pCloud रिमोट स्टोरेज स्पेस में इंजेक्ट करने के लिए डिज़ाइन किया गया है।
-
-यह रिपोजिटरी एक स्प्लिट-सिस्टम आर्किटेक्चर पर काम करती है: तेजी से एसेट रिज़ॉल्यूशन के लिए एक हाई-एफिशिएंसी पायथन प्रोसेसिंग मॉड्यूल और मैन्युअल इंटरैक्शन सीमाओं को पूरी तरह से बायपास करने के लिए एक स्टैंडअलोन क्लाइंट-साइड डैशबोर्ड यूटिलिटी।
+एक सुरक्षित, क्लाइंट-साइड ब्राउज़र ऑटोमेशन मॉड्यूल जिसे आपके pCloud वर्कस्पेस पर एक ड्रेगेबल (Draggable) और मिनीमाइज़ेबल (Minimizable) इंजेक्ट पैनल जोड़ने के लिए डिज़ाइन किया गया है। यह रिएक्ट/व्यू जैसे रिएक्टिव फॉर्म कंट्रोल्स को ऑटोमेट करके आपके एक्सट्रैक्ट किए गए डायरेक्ट डाउनलोड लिंक्स को सीधे रिमोट स्टोरेज स्लॉट में स्ट्रीम करता है।
 
 ---
 
-## 📁 रिपोजिटरी ब्लूप्रिंट स्ट्रक्चर (Repository Blueprint Structure)
+## 📁 रिपोजिटरी फोल्डर पाथ (Repository Folder Location)
 
+इस फ़ाइल को अपनी रिपोजिटरी संरचना में निम्नलिखित स्थान पर रखें:
 ```text
-├── .github/workflows/
-│   └── scrape.yml          # ऑटोमैटिक डिप्लॉयमेंट एग्जीक्यूशन रनर
 ├── extensions/
-│   ├── README.md           # यूज़रस्क्रिप्ट एक्सटेंशन के लिए विशिष्ट डॉक्यूमेंटेशन
-│   └── pcloud-bulk-injector.user.js  # ड्रेगेबल फ्रंटएंड ऑटोमेशन डैशबोर्ड
-├── direct_links.txt        # डायनामिक कंपाइलेशन आउटपुट टारगेट फ़ाइल
-├── links.txt               # एंट्री क्यू पैरामीटर इनपुट फ़ाइल
-├── scraper.py              # सुव्यवस्थित 20-सेकंड एसेट एक्सट्रैक्शन इंजन
-├── worker.js               # एज-नेटिव क्लाउडफ्लेयर वर्कर वेब पैनल
-└── README.md               # मास्टर टेक्निकल डॉक्यूमेंटेशन (यह फ़ाइल)
+│   ├── README.md           # यूज़रस्क्रिप्ट एक्सटेंशन के लिए विशिष्ट डॉक्यूमेंटेशन (यह फ़ाइल)
+│   └── pcloud-bulk-injector.user.js  # ड्रेगेबल फ्रंटएंड ऑटोमेशन डैशबोर्ड स्क्रिप्ट
 
 ```
 
 ---
 
-## 🚀 मुख्य फ्रेमवर्क विशेषताएं (Key Framework Features)
+## 🚀 मुख्य वास्तुकला क्षमताएं (Architectural Capabilities)
 
-* **10x फ़ास्ट लिंक रिज़ॉल्यूशन:** सटीक रेगुलर एक्सप्रेशंस के साथ जुड़े एटॉमिक HTTP रिक्वेस्ट स्ट्रीम का उपयोग करके भारी ब्राउज़र ऑटोमेशन लेयर्स को बायपास करता है। बल्क एंट्रीज को मिलीसेकंड में रिज़ॉल्व करता है।
-* **एज-नेटिव विकल्प:** सीधे एज नेटवर्क पर लेआउट को प्रोसेस करने के लिए स्टैंडअलोन सर्वरलेस एनवायरनमेंट (Cloudflare Workers) के साथ पूरी तरह से कम्पैटिबल है।
-* **ऑटोमैटिक स्टोरेज पाइपलाइन:** लोकल बैंडविड्थ का उपभोग किए बिना एक्सट्रैक्टेड आर्काइव्स को सीधे क्लाउड एनवायरनमेंट में सुरक्षित रूप से रूट करने के लिए हमारे कस्टम फ्रंटएंड इंजेक्टर के साथ मिलकर काम करता है।
-* **रेट-लिमिट शील्डिंग:** रिमोट नेटवर्क इंटरफेस चैनलों को सैचुरेशन से बचाने के लिए बैच एग्जीक्यूशन रिक्वेस्ट को सख्त रूप से 30 एलिमेंट्स तक सीमित करने वाली मजबूत सुरक्षा सीमा।
-* **सख्त सुरक्षा सुदृढ़ीकरण:** कोर इंजन सुरक्षित HTTPS ट्रांसपोर्ट लेयर्स को लागू करते हैं और सर्वर पाथ एक्सपोज़र को रोकने के लिए ट्रेस लीक को मास्क करते हैं।
-
----
-
-## 💻 टेक्निकल सेटअप और डिप्लॉयमेंट (Technical Setup & Deployments)
-
-### कोर लिंक एक्सट्रैक्टर इंजन (`scraper.py`)
-
-यह स्क्रिप्ट होस्टिंग पेज सोर्स ट्री को सुरक्षित रूप से स्कैन करने के लिए सीधे टर्मिनल या रिमोट इंटीग्रेशन लेयर्स के जरिए चलती है।
-
-#### सेटअप आवश्यकताएं (Setup Requirements)
-
-```bash
-python -m pip install --upgrade pip
-pip install requests
-
-```
-
-#### निष्पादन (Execution)
-
-`links.txt` में रॉ आर्काइव कोड डालें और स्ट्रीमलाइनर लॉन्च करें:
-
-```bash
-python scraper.py
-
-```
-
-डायरेक्ट लिंक्स 20 सेकंड से भी कम समय में `direct_links.txt` के अंदर क्लीनली कंपाइल हो जाते हैं।
+* **रिएक्टिव फॉर्म इंटरसेप्शन:** रिएक्टिव स्टेट ट्रैकर्स (React/Vue) को प्रोग्रामेटिक रूप से बायपास करने के लिए मूल जावास्क्रिप्ट ऑब्जेक्ट प्रोटोटाइप डिस्क्रिप्टर एडजस्टमेंट्स का उपयोग करता है, जिससे फ़ील्ड्स इनपुट किए गए लिंक्स को सही ढंग से कैप्चर कर पाते हैं।
+* **ड्रेगेबल कोर कैनवास:** फ्लोटिंग रिलेटिव बाउंडिंग एंकर के साथ निर्मित, जो आपको पूरे व्यूपोर्ट में कहीं भी इनपुट टर्मिनल को स्वतंत्र रूप से स्थानांतरित या मिनीमाइज़ करने की अनुमति देता है।
+* **अतुल्यकालिक कतार प्रबंधन (Async Queue):** टोकन लोडिंग अंतराल और देरी को क्लीनली संभालने के लिए सुरक्षात्मक संरचनात्मक लूप्स को शामिल करते हुए, मल्टी-लाइन बैच लिंक एरेज़ को क्रमिक रूप से प्रोसेस करता है।
+* **सैंडबॉक्स सुरक्षा सुदृढ़ीकरण:** सख्त, नॉन-innerHTML DOM इंस्टाशिएशन नियमों (`document.createElement`) के साथ निर्मित ताकि कठोर एक्सटेंशन सुरक्षा प्रोफाइल का अनुपालन किया जा सके और क्रॉस-साइट एक्ज़ीक्यूशन हुक्स को रोका जा सके।
 
 ---
 
-## 🔒 सुरक्षा संचालन मैट्रिक्स (Security Operations Matrix)
+## ⚙️ इंस्टालेशन और डिप्लॉयमेंट (Installation & Deployment)
 
-| प्रवर्तन वेक्टर (Enforcement Vector) | लागू मानक प्रोटोकॉल (Applied Standard Protocol) | निवारक लक्ष्य जोखिम (Preventative Target Risk) |
-| --- | --- | --- |
-| **आईफ्रेम संलग्नक** | `X-Frame-Options: DENY` | क्लिकजैकिंग / अनऑथराइज्ड मास्किंग |
-| **पेलोड सैनिटाइजेशन** | रेगेक्स ट्रेलिंग-कोड क्लीयरेंस | एक्सप्लोइटिव HTML इंसर्शन अटैक |
-| **डेटा माइम कंट्रोल** | सख्त `nosniff` हेडर प्रवर्तन | क्रॉस-साइट कंटेंट स्निफिंग इंजेक्शन |
-| **एरर मास्किंग** | अनाम 500 रिपॉन्स | सर्वर पाथ और ट्रेस लीक को प्रतिबंधित करना |
+1. अपने पसंदीदा आधुनिक ब्राउज़र पर **Tampermonkey** या **Violentmonkey** एक्सटेंशन कंटेनर इंस्टॉल करें।
+2. एक्सटेंशन डैशबोर्ड के भीतर **Create a new script** पर क्लिक करें।
+3. संपूर्ण बॉयलरप्लेट कोड को हटाकर हमारी सुरक्षित एंट्री फ़ाइल `pcloud-bulk-injector.user.js` के कोड से बदलें।
+4. कॉन्फ़िगरेशन को सहेजें और अपने pCloud वर्कस्पेस `https://my.pcloud.com/*` पर जाएं।
+5. एक प्रीमियम मिनिमल पैनल नीचे दाईं ओर आसानी से फ्लोट करेगा। अपने एक्सट्रैक्ट किए गए बैच लिंक्स पेस्ट करें और **Start Bulk Upload** पर क्लिक करें।
+
+---
+
+## 🛠️ कोड प्रवर्तन दिशानिर्देश (Code Enforcement Guidelines)
+
+* **सिलेक्टर्स विश्वसनीयता:** यदि pCloud भविष्य में अपनी लेआउट संरचना को बदलता है, तो फ़ाइल के शीर्ष पर स्थित स्टेटिक `SELECTORS` ऑब्जेक्ट ब्लॉक के भीतर मानों को सत्यापित और समायोजित करें।
+* **कन्फर्मेशन सेफ्टी लूप्स:** अंतर्निहित मोडल विज़िबिलिटी चेकर्स लगातार टारगेट रैपर क्लास की निगरानी करते हैं जब तक कि तत्व गायब न हो जाएं, जिससे कतार ड्रॉपिंग (Queue dropping) की त्रुटियां समाप्त हो जाती हैं।
 
 ---
 
 ## 💖 आभार और पावती (Credits & Acknowledgments)
 
-पूर्ण रूप से अधिकतम थ्रूपुट स्पीड, विजुअल कम्फर्ट और ऑटोमेटेड निरंतरता सुनिश्चित करने के लिए क्लीनली इंजीनियर किया गया है।
+हाई-स्पीड क्लाउड ऑपरेशन्स को ऑटोमेट करने पर केंद्रित लिंक स्ट्रीमलाइनर मैट्रिक्स का एक हिस्सा।
 
-* **सिस्टम आर्किटेक्चर और इंटरफेस डिज़ाइन:** **pavnxet** द्वारा प्रबंधित
-* **इंटरएक्टिव डिजिटल पोर्टफोलियो:** [pavnxet.github.io](https://pavnxet.github.io/)
+* **एक्सटेंशन इंजीनियरिंग:** **pavnxet** द्वारा विकसित
+* **आधिकारिक गेटवे पोर्टल:** [pavnxet.github.io](https://pavnxet.github.io/)
 
 ---
 
@@ -87,86 +57,57 @@ python scraper.py
 
 
 
-# ⚡ FitGirl Link Streamliner & Automation Matrix (English Version)
+# 🎛️ pCloud Bulk Injector — Extension Hub (English Version)
 
-An intelligent, secure, and ultra-fast deployment architecture designed to automatically extract direct download URLs from FuckingFast.co and seamlessly inject them directly into your pCloud remote storage space via edge automation.
-
-This repository orchestrates a split-system architecture: a high-efficiency Python processing module for rapid asset resolving and a standalone client-side dashboard utility to bypass manual interaction boundaries entirely.
+A secure, client-side browser automation module designed to attach a draggable and minimizable injection interface onto your pCloud workspace. It automates reactive form controls to stream direct download keys seamlessly into remote storage slots.
 
 ---
 
-## 📁 Repository Blueprint Structure
+## 📁 Repository Folder Location
+
+Place this file in the following path inside your repository structure:
 
 ```text
-├── .github/workflows/
-│   └── scrape.yml          # Automated deployment execution runners
 ├── extensions/
-│   ├── README.md           # Specific documentation for UserScript extension
+│   ├── README.md           # This specific UserScript documentation (This file)
 │   └── pcloud-bulk-injector.user.js  # Draggable frontend automation dashboard
-├── direct_links.txt        # Dynamic compilation output targets
-├── links.txt               # Entry queue parameters file
-├── scraper.py              # Streamlined 20-second asset extraction engine
-├── worker.js               # Edge-native Cloudflare Worker web panel
-└── README.md               # Master technical documentation
 
 ```
 
 ---
 
-## 🚀 Key Framework Features
+## 🚀 Architectural Capabilities
 
-* **10x Faster Link Resolving:** Bypasses heavy browser automation layers by employing atomic HTTP request streams coupled with strict Regular Expressions. Resolves bulk entries in milliseconds.
-* **Edge-Native Option:** Fully compatible with standalone serverless environments (Cloudflare Workers) to process layouts directly on the edge network.
-* **Automated Storage Pipeline:** Works hand-in-hand with our custom frontend injector to safely route extracted archives straight to cloud environments without consuming local bandwidth.
-* **Rate-Limit Shielding:** Hardened security boundary limiting batch execution requests to 30 elements to protect remote network interface channels from saturation.
-* **Strict Security Hardening:** Core engines enforce secure HTTPS transport layers and mask trace leaks to prevent server path exposures.
-
----
-
-## 💻 Technical Setup & Deployments
-
-### Core Link Extractor Engine (`scraper.py`)
-
-This script executes directly via terminal or remote integration layers to sweep through hosting page source trees safely.
-
-#### Setup Requirements
-
-```bash
-python -m pip install --upgrade pip
-pip install requests
-
-```
-
-#### Execution
-
-Place raw archive codes into `links.txt` and launch the streamliner:
-
-```bash
-python scraper.py
-
-```
-
-Direct links compile cleanly inside `direct_links.txt` in under 20 seconds.
+* **Reactive Form Interception:** Utilizes native JavaScript object prototype descriptor adjustments to programmatically bypass tightly bound state trackers (React/Vue), forcing fields to capture inputs correctly.
+* **Draggable Core Canvas:** Built with floating relative bounding anchors, allowing you to reposition or minimize the input terminal freely anywhere across the viewport.
+* **Asynchronous Queue Management:** Processes multi-line batch link arrays sequentially, incorporating protective structural loops to cleanly handle delays and token loading intervals.
+* **Sandboxed Security Hardening:** Built with strict, non-innerHTML DOM instantiation rules (`document.createElement`) to comply with rigid extension security profiles and prevent cross-site execution hooks.
 
 ---
 
-## 🔒 Security Operations Matrix
+## ⚙️ Installation & Deployment
 
-| Enforcement Vector | Applied Standard Protocol | Preventative Target Risk |
-| --- | --- | --- |
-| **Iframe Enclosure** | `X-Frame-Options: DENY` | Clickjacking / Unauthorized Masking |
-| **Payload Sanitization** | Regex Trailing-Code Clearance | Exploitive HTML Insertion Attacks |
-| **Data Mime Control** | Strict `nosniff` Headers Enforcement | Cross-Site Content Sniffing Injections |
-| **Error Masking** | Anonymized 500 Responses | Restricts Server Path and Trace Leaks |
+1. Install the **Tampermonkey** or **Violentmonkey** extension container on your preferred modern browser.
+2. Click **Create a new script** within the extension dashboard.
+3. Replace the entire boilerplate container code with the contents of our secure entry file: `pcloud-bulk-injector.user.js`.
+4. Save the configuration and head over to your workspace at `https://my.pcloud.com/*`.
+5. The minimal panel will float smoothly at the bottom right. Paste your extracted batch links and click **Start Bulk Upload**.
+
+---
+
+## 🛠️ Code Enforcement Guidelines
+
+* **Selector Reliability:** If pCloud mutates its layout structure, verify and adjust the values inside the static `SELECTORS` object block at the head of the file.
+* **Confirmation Safety Loops:** Built-in modal visibility checkers continuously monitor the target wrapper class until elements disappear before triggering subsequent iterations, eliminating queue dropping errors.
 
 ---
 
 ## 💖 Credits & Acknowledgments
 
-Engineered cleanly to ensure absolute maximum throughput speeds, visual comfort, and automated continuity.
+Part of the link streamliner matrix focused on automating high-speed cloud operations.
 
-* **System Architecture & Interface Design:** Managed by **pavnxet**
-* **Interactive Digital Portfolio:** [pavnxet.github.io](https://pavnxet.github.io/)
+* **Extension Engineering:** Developed by **pavnxet**
+* **Official Gateway Portal:** [pavnxet.github.io](https://pavnxet.github.io/)
 
 ---
 
