@@ -6,7 +6,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-# Chrome की एडवांस्ड सेटिंग्स
+# Chrome की एडवांस्ड और फास्ट सेटिंग्स
 chrome_options = Options()
 chrome_options.add_argument("--headless")
 chrome_options.add_argument("--no-sandbox")
@@ -14,8 +14,13 @@ chrome_options.add_argument("--disable-dev-shm-usage")
 chrome_options.add_argument("--disable-blink-features=AutomationControlled")
 chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
-# रिमोट रनर (GitHub Actions) में डाउनलोड्स को ब्लॉक होने से रोकने के लिए
-prefs = {"download.default_directory": "/dev/null"} 
+# ⚡ स्पीड बूस्टर: इमेज, CSS और एक्सटेंशन लोड होने से रोकें ताकि पेज तुरंत लोड हो
+prefs = {
+    "download.default_directory": "/dev/null",
+    "profile.managed_default_content_settings.images": 2,      # 2 का मतलब Images ब्लॉक
+    "profile.managed_default_content_settings.stylesheets": 2, # Stylesheets/CSS ब्लॉक
+    "profile.managed_default_content_settings.cookies": 1
+} 
 chrome_options.add_experimental_option("prefs", prefs)
 
 driver = webdriver.Chrome(options=chrome_options)
@@ -33,16 +38,17 @@ print(f"Total URLs found: {len(urls)}")
 
 for idx, url in enumerate(urls, 1):
     try:
+        start_time = time.time()
         print(f"[{idx}/{len(urls)}] Processing: {url}")
         driver.get(url)
         
-        # बटन का लोड होने तक इंतज़ार (15 सेकंड)
-        wait = WebDriverWait(driver, 15)
+        # बटन का लोड होने तक इंतज़ार (अधिकतम 10 सेकंड)
+        wait = WebDriverWait(driver, 10)
         download_button = wait.until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, "button.gay-button"))
         )
         
-        # 🛠️ जादुई स्क्रिप्ट: window.open को हुक/ओवरराइड करना ताकि यह नया टैब खोलने के बजाय लिंक कैप्चर कर ले
+        # window.open को हुक/ओवरराइड करना ताकि यह तुरंत लिंक कैप्चर करे
         driver.execute_script("""
             window.capturedDownloadUrl = null;
             window.open = function(openUrl) {
@@ -51,16 +57,18 @@ for idx, url in enumerate(urls, 1):
             };
         """)
         
-        # बटन पर क्लिक करना (जावास्क्रिप्ट के ज़रिए क्लिक ताकि पॉपअप ब्लॉकर ट्रिगर न हो)
+        # बटन पर त्वरित क्लिक
         driver.execute_script("arguments[0].click();", download_button)
         
-        # लिंक जनरेशन और वेरिएबल अपडेट के लिए थोड़ा इंतज़ार (5 सेकंड)
-        time.sleep(5) 
+        # ⚡ डायनामिक वेटिंग (Zero Fixed Sleep): जैसे ही लिंक मिलेगा, लूप तुरंत आगे बढ़ेगा
+        direct_link = None
+        for _ in range(25):  # अधिकतम 5 सेकंड का इंतज़ार (0.2s * 25)
+            direct_link = driver.execute_script("return window.capturedDownloadUrl;")
+            if direct_link:
+                break
+            time.sleep(0.2)
         
-        # इंजेक्ट किए गए वेरिएबल से डायरेक्ट लिंक प्राप्त करना
-        direct_link = driver.execute_script("return window.capturedDownloadUrl;")
-        
-        # बैकअप विकल्प: अगर जावास्क्रिप्ट हुक काम न करे, तो पारंपरिक एंकर टैग्स स्कैन करें
+        # बैकअप विकल्प: अगर जावास्क्रिप्ट हुक से नहीं मिला, तो तुरंत DOM स्कैन करें
         if not direct_link:
             links_in_page = driver.find_elements(By.TAG_NAME, "a")
             for a_tag in links_in_page:
@@ -69,16 +77,16 @@ for idx, url in enumerate(urls, 1):
                     direct_link = href
                     break
                     
-        # अंतिम बैकअप विकल्प: अगर कुछ भी न मिले तो ओरिजिनल यूआरएल का उपयोग करें
+        # अंतिम बैकअप
         if not direct_link:
             direct_link = driver.current_url
             
-        print(f"✅ Successfully processed part {idx} -> Found: {direct_link}")
+        elapsed_time = time.time() - start_time
+        print(f"✅ Successfully processed part {idx} in {elapsed_time:.2s}s -> Found: {direct_link}")
         output_links.append(direct_link)
         
     except Exception as e:
         print(f"❌ Error on link {idx}: {str(e)}")
-        # बैकअप के तौर पर ओरिजिनल लिंक ही रख रहे हैं ताकि लिस्ट का आर्डर न बिगड़े
         output_links.append(f"FAILED: {url}")
 
 driver.quit()
