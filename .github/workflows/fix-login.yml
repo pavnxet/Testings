@@ -9,14 +9,17 @@ permissions:
 
 jobs:
   patch:
-    if: ${{ !contains(github.event.head_commit.message, 'fix(auth): add GET login route') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Patch worker
+      - name: Patch worker once
         run: |
+          if git log -1 --pretty=%s | grep -Fq 'fix(auth): add GET login route'; then
+            echo 'Patch commit already applied.'
+            exit 0
+          fi
           python - <<'PY'
           from pathlib import Path
           p = Path('worker.js')
@@ -27,8 +30,6 @@ jobs:
               raise SystemExit('login route anchor not found')
           p.write_text(s.replace(old, new, 1))
           PY
-      - name: Commit patch
-        run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add worker.js
