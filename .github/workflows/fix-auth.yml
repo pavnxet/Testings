@@ -1,0 +1,47 @@
+name: Fix auth routes
+
+on:
+  push:
+    branches: [Fitgirl-games-extracter]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, 'fix(auth): patch login route') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply minimal auth fixes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('worker.js')
+          s = p.read_text()
+
+          old = '''    // Authentication\n    if (url.pathname === "/login" && request.method === "POST") {'''
+          new = '''    // Authentication\n    if (url.pathname === "/login" && request.method === "GET") {\n      return loginPage();\n    }\n\n    if (url.pathname === "/login" && request.method === "POST") {'''
+          if old not in s:
+              raise SystemExit('GET /login anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = '''    const htmlUI = `'''
+          anchor = '''    const htmlUI = `'''
+          if anchor not in s:
+              raise SystemExit('dashboard anchor not found')
+
+          # The previous implementation already builds Set-Cookie in the final response.
+          # Keep that behavior unchanged; only the missing GET /login route is patched.
+          p.write_text(s)
+          PY
+      - name: Commit minimal fix
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add worker.js
+          git diff --cached --quiet && exit 0
+          git commit -m 'fix(auth): patch login route'
+          git push
