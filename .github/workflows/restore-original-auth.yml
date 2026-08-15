@@ -1,0 +1,89 @@
+name: Restore original dashboard auth
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [Fitgirl-games-extracter]
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    if: ${{ !contains(github.event.head_commit.message, 'restore original dashboard with password-only auth') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Restore original dashboard and remove guest mode
+        run: |
+          git show f15457bb498bd6e66424e8e59dbfd99632949f8f:worker.js > worker.js
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          p = Path('worker.js')
+          s = p.read_text()
+
+          # Remove guest constants and guest verifier.
+          s = s.replace(' * 🔐 Minimal password auth + 2-minute guest preview\n', ' * 🔐 Password-protected private scraper\n')
+          s = s.replace('const GUEST_COOKIE = "ff_guest";\n', '')
+          s = s.replace('const GUEST_MAX_AGE = 60 * 2;\n', '')
+          s = re.sub(r'\nasync function isGuest\(request, env\) \{.*?\n\}\n', '\n', s, count=1, flags=re.S)
+
+          # Login page: GET must work, and normal page is HTTP 200.
+          s = s.replace('    <a href="/" class="block text-center mt-4 text-sm text-stone-500 hover:text-stone-900">← Back to guest preview</a>\n', '')
+          s = s.replace('</html>`, { status: 401, headers: securityHeaders() });', '</html>`, { status: message ? 401 : 200, headers: securityHeaders() });')
+          s = s.replace('    // Authentication\n    if (url.pathname === "/login" && request.method === "POST") {', '    // Authentication\n    if (url.pathname === "/login" && request.method === "GET") {\n      return loginPage();\n    }\n\n    if (url.pathname === "/login" && request.method === "POST") {', 1)
+
+          # Remove /guest-exit.
+          s = re.sub(r'\n    if \(url\.pathname === "/guest-exit"\) \{.*?\n    \}\n', '\n', s, count=1, flags=re.S)
+
+          # Password-only dashboard gate.
+          guest_block = re.compile(r'    // Guest preview or authenticated dashboard\..*?\n    const htmlUI = `', re.S)
+          replacement = '    // Password-only dashboard: no guest preview.\n    if (!(await isAuthenticated(request, env))) return loginPage();\n\n    const htmlUI = `'
+          s, n = guest_block.subn(replacement, s, count=1)
+          if n != 1:
+              raise SystemExit('dashboard auth block not found')
+
+          # Remove guest CSS.
+          s = re.sub(r'\n            \.guest-banner \{.*?\n            \}\n\n            \.guest-timer \{.*?\n            \}\n', '\n', s, count=1, flags=re.S)
+
+          # Remove guest/authenticated banner from dashboard.
+          s = re.sub(r'\n            \$\{guest \? `.*?` : `.*?`\}\n', '\n', s, count=1, flags=re.S)
+
+          # Restore textarea and submit button to the original always-enabled form.
+          s = s.replace("                        ${guest ? 'readonly' : ''}\n", '')
+          s = s.replace("                    <span>${guest ? '🔐 Login to Launch Scraper' : '🚀 Launch Parallel Scraper'}</span>", '                    <span>🚀 Launch Parallel Scraper</span>')
+
+          # Remove guest timer JavaScript.
+          s = s.replace("            const IS_GUEST = ${guest ? 'true' : 'false'};\n\n", '')
+          s = re.sub(r'\n            if \(IS_GUEST\) \{.*?\n            \}\n\n            document\.getElementById\(\'scraperForm\'\)', "\n            document.getElementById('scraperForm')", s, count=1, flags=re.S)
+
+          # Remove guest cookie from final response.
+          s = re.sub(r'\n    const headers = securityHeaders\(\);\n    if \(setGuestCookie\) headers\["Set-Cookie"\] = setGuestCookie;\n', '\n    const headers = securityHeaders();\n', s, count=1)
+
+          # Remove any residual guest identifiers/comments.
+          if any(x in s for x in ['GUEST_COOKIE', 'GUEST_MAX_AGE', 'isGuest(', 'IS_GUEST', 'guestTimer', 'setGuestCookie', '/guest-exit', 'guest-banner', 'guest-timer']):
+              raise SystemExit('Guest-preview code still remains')
+
+          p.write_text(s)
+          PY
+
+          node --check worker.js
+
+      - name: Commit restored worker
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add worker.js
+          git commit -m 'restore original dashboard with password-only auth'
+          git push
+
+      - name: Remove temporary workflow
+        run: |
+          git rm .github/workflows/restore-original-auth.yml
+          git commit -m 'chore: remove temporary restore workflow'
+          git push
