@@ -146,6 +146,10 @@ export default {
     }
 
     // Authentication
+    if (url.pathname === "/login" && request.method === "GET") {
+      return loginPage();
+    }
+
     if (url.pathname === "/login" && request.method === "POST") {
       try {
         const formData = await request.formData();
