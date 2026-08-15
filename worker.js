@@ -7,9 +7,8 @@
 
 const AUTH_COOKIE = "ff_auth";
 const GUEST_COOKIE = "ff_guest";
-const AUTH_MAX_AGE = 60 * 60 * 24; // 24 hours
-const GUEST_MAX_AGE = 60 * 2; // 2 minutes
-
+const AUTH_MAX_AGE = 60 * 60 * 24;
+const GUEST_MAX_AGE = 60 * 2;
 const encoder = new TextEncoder();
 
 function timingSafeEqual(a, b) {
@@ -37,13 +36,7 @@ async function signToken(secret, type, issuedAt) {
     false,
     ["sign"]
   );
-
-  const signature = await crypto.subtle.sign(
-    "HMAC",
-    key,
-    encoder.encode(payload)
-  );
-
+  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
   return `${payload}.${base64Url(signature)}`;
 }
 
@@ -53,14 +46,13 @@ function getCookie(request, name) {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
-async function verifyToken(request, env, name, type, maxAge) {
+async function verifyToken(request, env, cookieName, tokenType, maxAge) {
   if (!env.AUTH_PASSWORD) return false;
-
-  const token = getCookie(request, name);
+  const token = getCookie(request, cookieName);
   if (!token) return false;
 
   const parts = token.split(".");
-  if (parts.length !== 3 || parts[0] !== type) return false;
+  if (parts.length !== 3 || parts[0] !== tokenType) return false;
 
   const issuedAt = Number(parts[1]);
   if (!Number.isFinite(issuedAt)) return false;
@@ -69,7 +61,7 @@ async function verifyToken(request, env, name, type, maxAge) {
   if (issuedAt > now + 60_000) return false;
   if (now - issuedAt > maxAge * 1000) return false;
 
-  const expected = await signToken(env.AUTH_PASSWORD, type, issuedAt);
+  const expected = await signToken(env.AUTH_PASSWORD, tokenType, issuedAt);
   return timingSafeEqual(token, expected);
 }
 
@@ -108,8 +100,7 @@ function loginPage(message = "") {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
 
-  return new Response(`
-<!DOCTYPE html>
+  return new Response(`<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -130,8 +121,7 @@ function loginPage(message = "") {
     <a href="/" class="block text-center mt-4 text-sm text-stone-500 hover:text-stone-900">← Back to guest preview</a>
   </div>
 </body>
-</html>
-`, { status: 401, headers: securityHeaders() });
+</html>`, { status: 401, headers: securityHeaders() });
 }
 
 function unauthorizedJson() {
@@ -155,7 +145,7 @@ export default {
       });
     }
 
-    // 0. Authentication endpoints
+    // Authentication
     if (url.pathname === "/login" && request.method === "POST") {
       try {
         const formData = await request.formData();
@@ -165,9 +155,7 @@ export default {
           return loginPage("Invalid password.");
         }
 
-        const issuedAt = Date.now();
-        const token = await signToken(env.AUTH_PASSWORD, "auth", issuedAt);
-
+        const token = await signToken(env.AUTH_PASSWORD, "auth", Date.now());
         return new Response(null, {
           status: 303,
           headers: {
@@ -203,12 +191,9 @@ export default {
       });
     }
 
-    // 1. POST Request Handling: High-Speed Parallel Scraping Logic
+    // The API is always protected. Guest preview never gets scraper access.
     if (request.method === "POST" && url.pathname === "/scrape") {
-      // Guest users can see the dashboard, but only authenticated users can execute scraping.
-      if (!(await isAuthenticated(request, env))) {
-        return unauthorizedJson();
-      }
+      if (!(await isAuthenticated(request, env))) return unauthorizedJson();
 
       try {
         const formData = await request.formData();
@@ -248,12 +233,20 @@ export default {
             return { type: 'error', msg: `❌ Rejected (Insecure Protocol): ${targetUrl}` };
           }
 
-          if (!targetUrl.includes("fuckingfast.co")) {
+          let parsedUrl;
+          try {
+            parsedUrl = new URL(targetUrl);
+          } catch {
+            return { type: 'error', msg: `❌ Rejected (Invalid URL): ${targetUrl}` };
+          }
+
+          const hostname = parsedUrl.hostname.toLowerCase();
+          if (hostname !== "fuckingfast.co" && !hostname.endsWith(".fuckingfast.co")) {
             return { type: 'error', msg: `❌ Rejected (Unsupported Domain): ${targetUrl}` };
           }
 
           try {
-            // 🔥 सुधार 1: URL से # (Hash/Fragment) को पूरी तरह हटाना ताकि सर्वर कंफ्यूज न हो
+            // 🔥 URL से # (Hash/Fragment) को पूरी तरह हटाना
             const cleanUrl = targetUrl.split('#')[0];
 
             // Anti-Bot Advanced Bypassing Headers
@@ -274,7 +267,6 @@ export default {
               "Upgrade-Insecure-Requests": "1"
             };
 
-            // 🔥 सुधार 2: Cloudflare Advanced TLS & Browser Verification features को फाॅर्स करना
             const response = await fetch(cleanUrl, {
               headers: antiBotHeaders,
               redirect: "follow",
@@ -293,44 +285,43 @@ export default {
               if (match && match[1]) directLink = match[1];
 
               if (!directLink) {
-                const backupMatch = pageSource.match(/(https:\/\/dl\.fuckingfast\.co\/dl\/[^^\s"'\>]+)/);
+                const backupMatch = pageSource.match(/(https:\/\/dl\.fuckingfast\.co\/dl\/[^\s"'\>]+)/);
                 if (backupMatch && backupMatch[1]) directLink = backupMatch[1];
               }
 
               if (directLink) {
                 return { type: 'success', msg: directLink.replace(/[\s"'\>]+/g, '') };
-              } else {
-                return { type: 'error', msg: `⚠️ Direct link signature not found: ${targetUrl}` };
               }
-            } else {
-              return { type: 'error', msg: `❌ HTTP Error ${response.status}: ${targetUrl}` };
+
+              return { type: 'error', msg: `⚠️ Direct link signature not found: ${targetUrl}` };
             }
+
+            return { type: 'error', msg: `❌ HTTP Error ${response.status}: ${targetUrl}` };
           } catch (e) {
             return { type: 'error', msg: `❌ Network failure: ${e.message}` };
           }
         });
 
         const results = await Promise.all(fetchPromises);
-
         const successLinks = results.filter(r => r.type === 'success').map(r => r.msg);
         const errorLinks = results.filter(r => r.type === 'error').map(r => r.msg);
 
         return new Response(JSON.stringify({ success: true, successLinks, errorLinks }), {
           headers: {
             "Content-Type": "application/json",
-            "X-Data-Source": "pavnxet-engine"
+            "X-Data-Source": "pavnxet-engine",
+            "Cache-Control": "no-store"
           }
         });
-
       } catch (err) {
         return new Response(JSON.stringify({ success: false, error: "Internal Server Error" }), {
           status: 500,
-          headers: { "Content-Type": "application/json" }
+          headers: { "Content-Type": "application/json", "Cache-Control": "no-store" }
         });
       }
     }
 
-    // 2. GET Request Handling: Premium UI Dashboard
+    // Guest preview or authenticated dashboard.
     const authenticated = await isAuthenticated(request, env);
     let guest = false;
     let setGuestCookie = null;
@@ -343,9 +334,9 @@ export default {
           return loginPage("Your 2-minute guest preview has expired.");
         }
 
-        const guestToken = await signToken(env.AUTH_PASSWORD, "guest", Date.now());
+        const token = await signToken(env.AUTH_PASSWORD, "guest", Date.now());
         guest = true;
-        setGuestCookie = cookieHeader(GUEST_COOKIE, guestToken, GUEST_MAX_AGE);
+        setGuestCookie = cookieHeader(GUEST_COOKIE, token, GUEST_MAX_AGE);
       }
     }
 
@@ -461,7 +452,7 @@ export default {
             }
 
             .guest-banner {
-                background: var(--bg-inner);
+                background-color: var(--bg-inner);
                 border: 1px solid var(--border-color);
                 color: var(--ink-muted);
             }
@@ -471,21 +462,6 @@ export default {
                 font-weight: 800;
                 font-variant-numeric: tabular-nums;
             }
-
-            .auth-state {
-                display: inline-flex;
-                align-items: center;
-                gap: 8px;
-                margin-bottom: 16px;
-                padding: 10px 14px;
-                border-radius: 12px;
-                border: 1px solid var(--border-color);
-                background: var(--bg-inner);
-                color: var(--ink-muted);
-                font-size: 13px;
-            }
-
-            .auth-state strong { color: var(--ink); }
         </style>
     </head>
     <body class="p-6 flex flex-col items-center justify-between min-h-screen">
@@ -508,14 +484,13 @@ export default {
             </div>
 
             ${guest ? `
-            <div class="auth-state guest-banner">
+            <div class="guest-banner rounded-xl px-4 py-3 mb-5 text-sm flex items-center gap-2">
                 <span>👀</span>
-                <span><strong>Guest preview</strong> — read-only for <span id="guestTimer" class="guest-timer">02:00</span>. Scraping unlocks after login.</span>
+                <span><strong style="color: var(--ink);">Guest preview</strong> — read-only for <span id="guestTimer" class="guest-timer">02:00</span>. Scraping unlocks after login.</span>
                 <a href="/login" class="ml-auto font-semibold underline" style="color: var(--accent);">Unlock</a>
             </div>` : `
-            <div class="auth-state">
-                <span>🔓</span>
-                <span><strong>Authenticated</strong> — full scraper access enabled.</span>
+            <div class="guest-banner rounded-xl px-4 py-3 mb-5 text-sm">
+                🔓 <strong style="color: var(--ink);">Authenticated</strong> — full scraper access enabled.
             </div>`}
 
             <p class="text-sm mb-6" style="color: var(--ink-muted);">Paste your batch links from FuckingFast.co. High-speed extraction with sequential pCloud mapping helper.</p>
@@ -655,7 +630,7 @@ export default {
                 const progressBar = document.getElementById('progressBar');
 
                 submitBtn.disabled = true;
-                submitBtn.querySelector('span').innerHTML = `⏳ Sorting Sequences Parallelly...`;
+                submitBtn.querySelector('span').textContent = "⏳ Sorting Sequences Parallelly...";
 
                 outputContainer.classList.add('hidden');
                 successBox.classList.add('hidden');
@@ -709,7 +684,6 @@ export default {
                                     const fileHash = link.substring(link.lastIndexOf('/') + 1);
                                     return "Part_" + partNum + "  ==>  " + fileHash;
                                 });
-
                                 document.getElementById('renameMapBox').value = mappingLines.join('\\n');
                             }
 
