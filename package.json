@@ -1,0 +1,8 @@
+{
+  "name": "fitgirl-directlink-extractor",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@cloudflare/puppeteer": "latest"
+  }
+}
