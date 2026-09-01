@@ -1,5 +1,8 @@
+import puppeteer from "@cloudflare/puppeteer";
+
 const AUTH_COOKIE = "ff_auth";
 const AUTH_MAX_AGE = 60 * 60 * 24;
+const MAX_URLS = 30;
 const encoder = new TextEncoder();
 
 function toBase64Url(bytes) {
@@ -11,17 +14,11 @@ function toBase64Url(bytes) {
 function fromBase64Url(value) {
   const padded = value.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((value.length + 3) % 4);
   const binary = atob(padded);
-  return Uint8Array.from(binary, char => char.charCodeAt(0));
+  return Uint8Array.from(binary, c => c.charCodeAt(0));
 }
 
 async function getKey(secret) {
-  return crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign", "verify"]
-  );
+  return crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]);
 }
 
 async function createAuthToken(secret) {
@@ -37,78 +34,95 @@ async function verifyAuthToken(request, secret) {
   const cookie = request.headers.get("Cookie") || "";
   const match = cookie.match(new RegExp(`(?:^|;\\s*)${AUTH_COOKIE}=([^;]+)`));
   if (!match) return false;
-
   try {
     const [payloadEncoded, signatureEncoded] = match[1].split(".");
     if (!payloadEncoded || !signatureEncoded) return false;
     const payload = new TextDecoder().decode(fromBase64Url(payloadEncoded));
     const exp = Number(payload);
     if (!Number.isFinite(exp) || exp < Math.floor(Date.now() / 1000)) return false;
-
     const key = await getKey(secret);
-    return await crypto.subtle.verify(
-      "HMAC",
-      key,
-      fromBase64Url(signatureEncoded),
-      encoder.encode(payload)
-    );
+    return crypto.subtle.verify("HMAC", key, fromBase64Url(signatureEncoded), encoder.encode(payload));
   } catch {
     return false;
   }
 }
 
-function jsonResponse(data, status = 200) {
-  return new Response(JSON.stringify(data), {
+function json(data, status = 200) {
+  return new Response(JSON.stringify(data, null, 2), {
     status,
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": "no-store",
-      "X-Content-Type-Options": "nosniff"
-    }
+    headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" }
   });
+}
+
+function page(title, body) {
+  return new Response(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>
+body{margin:0;background:#faf6f0;color:#1e1a15;font-family:system-ui,sans-serif;padding:24px}.card{max-width:900px;margin:40px auto;background:#fff;border:1px solid #e8ded0;border-radius:20px;padding:28px;box-shadow:0 10px 30px #0000000d}input,textarea,button{font:inherit}textarea{width:100%;min-height:220px;box-sizing:border-box;padding:14px;border:1px solid #e8ded0;border-radius:12px;background:#f6efe5}button{margin-top:12px;padding:12px 18px;border:0;border-radius:10px;background:#b55d2b;color:#fff;font-weight:700;cursor:pointer}.muted{color:#6e655a}.ok{color:#1e4620}.err{color:#8b2624;white-space:pre-wrap}code{word-break:break-all}</style></head><body><main class="card">${body}</main></body></html>`, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
 }
 
 function loginPage(error = "") {
-  const errorHtml = error
-    ? `<div style="margin-bottom:16px;padding:12px;border-radius:10px;background:#fdeded;color:#8b2624;border:1px solid #efc7c5;font-size:14px;">${error}</div>`
-    : "";
+  return page("FuckingFast Resolver — Login", `<h1>⚡ FuckingFast Resolver</h1><p class="muted">Browser-based resolver with checkpointed failures.</p>${error ? `<p class="err">${error}</p>` : ""}<form method="POST" action="/login"><input name="password" type="password" placeholder="Access password" required autofocus style="width:100%;box-sizing:border-box;padding:13px;border:1px solid #e8ded0;border-radius:10px"><button>🔐 Unlock</button></form>`);
+}
 
-  return new Response(`<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FuckingFast Scraper — Login</title>
-<style>
-:root{--bg:#faf6f0;--surface:#fff;--ink:#1e1a15;--muted:#6e655a;--border:#e8ded0;--accent:#b55d2b;}
-*{box-sizing:border-box}body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:24px}
-.card{width:100%;max-width:420px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:32px;box-shadow:0 10px 30px -10px rgba(30,26,21,.08)}
-h1{margin:0 0 8px;font-size:28px}.muted{color:var(--muted);font-size:14px;margin-bottom:24px}label{display:block;font-size:14px;font-weight:600;margin-bottom:8px}input{width:100%;padding:13px 14px;border-radius:11px;border:1px solid var(--border);background:#f6efe5;color:var(--ink);outline:none;font-size:15px}input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(181,93,43,.15)}button{width:100%;margin-top:16px;padding:13px;border:0;border-radius:11px;background:var(--accent);color:white;font-size:15px;font-weight:700;cursor:pointer}footer{text-align:center;margin-top:20px;color:var(--muted);font-size:12px}a{color:var(--accent)}
-</style>
-</head>
-<body><main class="card"><h1>⚡ FuckingFast Scraper</h1><div class="muted">Enter the access password to continue.</div>${errorHtml}<form method="POST" action="/login"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required autofocus><button type="submit">🔐 Unlock Dashboard</button></form><footer>Made with 💖 by <a href="https://pavnxet.github.io/" target="_blank" rel="noopener noreferrer">pavnxet</a></footer></main></body></html>`, {
-    status: error ? 401 : 200,
-    headers: {
-      "Content-Type": "text/html; charset=utf-8",
-      "Cache-Control": "no-store",
-      "X-Content-Type-Options": "nosniff",
-      "X-Frame-Options": "DENY",
-      "Referrer-Policy": "no-referrer"
-    }
-  });
+function dashboard() {
+  return page("FuckingFast Resolver", `<h1>⚡ FuckingFast Resolver</h1><p class="muted">One URL per line. Filename fragments after <code>#</code> are preserved as metadata but never sent to the server.</p><form id="f"><textarea name="urls" placeholder="https://fuckingfast.co/bvkh77satm5c#filename.part1.rar"></textarea><button>Resolve links</button></form><pre id="out" style="margin-top:20px;white-space:pre-wrap"></pre><p><a href="/health">Health / diagnostics</a> · <a href="/logout">Logout</a></p><script>
+const f=document.getElementById('f'),o=document.getElementById('out');
+f.addEventListener('submit',async e=>{e.preventDefault();o.textContent='Resolving...';try{const r=await fetch('/scrape',{method:'POST',body:new FormData(f)});o.textContent=JSON.stringify(await r.json(),null,2)}catch(x){o.textContent='Request failed: '+x.message}});
+</script>`);
+}
+
+function parseInput(raw) {
+  const parsed = new URL(raw);
+  if (parsed.protocol !== "https:") throw new Error("Only HTTPS URLs are allowed");
+  if (parsed.hostname !== "fuckingfast.co") throw new Error("Unsupported domain");
+  const id = parsed.pathname.replace(/^\/+|\/+$/g, "");
+  if (!/^[A-Za-z0-9_-]{4,80}$/.test(id)) throw new Error("Invalid FuckingFast file id");
+  const filename = parsed.hash ? decodeURIComponent(parsed.hash.slice(1)) : "";
+  return { id, filename, pageUrl: `https://fuckingfast.co/${id}` };
+}
+
+async function resolveWithBrowser(input, env) {
+  const target = parseInput(input);
+  if (!env.BROWSER) throw new Error("BROWSER binding is missing. Configure Cloudflare Browser Run first.");
+
+  const browser = await puppeteer.launch(env.BROWSER);
+  const page = await browser.newPage();
+  const checkpoint = { stage: "browser_launch", id: target.id };
+
+  try {
+    checkpoint.stage = "open_page";
+    const response = await page.goto(target.pageUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+    checkpoint.pageStatus = response ? response.status() : null;
+
+    checkpoint.stage = "wait_for_page";
+    await new Promise(r => setTimeout(r, 1000));
+
+    checkpoint.stage = "resolve_endpoint";
+    const result = await page.evaluate(async id => {
+      const response = await fetch(`/f/${id}/go`, { method: "POST", headers: { "HX-Request": "true", "Accept": "text/html,*/*" } });
+      return {
+        status: response.status,
+        redirect: response.headers.get("HX-Redirect") || response.headers.get("Location"),
+        text: response.status >= 400 ? (await response.text()).slice(0, 500) : ""
+      };
+    }, target.id);
+
+    checkpoint.stage = "validate_redirect";
+    if (!result.redirect) throw new Error(`Resolver returned HTTP ${result.status} without a redirect`);
+    if (!/^https:\/\/dl\.fuckingfast\.co\/dl\//.test(result.redirect)) throw new Error(`Unexpected redirect target: ${result.redirect.slice(0, 300)}`);
+
+    return { success: true, directLink: result.redirect, filename: target.filename, checkpoint };
+  } catch (error) {
+    throw new Error(`${checkpoint.stage}: ${error.message}`);
+  } finally {
+    await browser.close();
+  }
 }
 
 export default {
-  async fetch(request, env, ctx) {
+  async fetch(request, env) {
     const url = new URL(request.url);
     const authSecret = env.AUTH_PASSWORD;
-
-    if (!authSecret) {
-      return new Response("Server authentication is not configured. Set the AUTH_PASSWORD Cloudflare secret.", {
-        status: 503,
-        headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" }
-      });
-    }
+    if (!authSecret) return new Response("AUTH_PASSWORD is not configured", { status: 503 });
 
     if (url.pathname === "/login" && request.method === "GET") {
       if (await verifyAuthToken(request, authSecret)) return Response.redirect(url.origin + "/", 302);
@@ -116,493 +130,40 @@ export default {
     }
 
     if (url.pathname === "/login" && request.method === "POST") {
-      try {
-        const formData = await request.formData();
-        const password = String(formData.get("password") || "");
-
-        if (!password || password !== authSecret) {
-          return loginPage("❌ Incorrect password. Please try again.");
-        }
-
-        const token = await createAuthToken(authSecret);
-        return new Response(null, {
-          status: 302,
-          headers: {
-            "Location": "/",
-            "Set-Cookie": `${AUTH_COOKIE}=${token}; Max-Age=${AUTH_MAX_AGE}; Path=/; HttpOnly; Secure; SameSite=Strict`,
-            "Cache-Control": "no-store"
-          }
-        });
-      } catch {
-        return loginPage("❌ Unable to process login.");
-      }
+      const form = await request.formData();
+      if (String(form.get("password") || "") !== authSecret) return loginPage("❌ Incorrect password");
+      const token = await createAuthToken(authSecret);
+      return new Response(null, { status: 302, headers: { Location: "/", "Set-Cookie": `${AUTH_COOKIE}=${token}; Max-Age=${AUTH_MAX_AGE}; Path=/; HttpOnly; Secure; SameSite=Strict` } });
     }
 
-    if (url.pathname === "/logout") {
-      return new Response(null, {
-        status: 302,
-        headers: {
-          "Location": "/login",
-          "Set-Cookie": `${AUTH_COOKIE}=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Strict`,
-          "Cache-Control": "no-store"
-        }
-      });
+    if (url.pathname === "/logout") return new Response(null, { status: 302, headers: { Location: "/login", "Set-Cookie": `${AUTH_COOKIE}=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Strict` } });
+
+    if (!(await verifyAuthToken(request, authSecret))) return loginPage();
+
+    if (url.pathname === "/health") {
+      return json({ ok: true, browserBindingConfigured: Boolean(env.BROWSER), resolver: "browser-run-v1", checkpointing: true, maxUrls: MAX_URLS });
     }
 
-    const authenticated = await verifyAuthToken(request, authSecret);
-
-    if (!authenticated) {
-      if (request.method === "POST" && url.pathname === "/scrape") {
-        return jsonResponse({ success: false, error: "Authentication required." }, 401);
-      }
-      return loginPage();
-    }
-
-    // 1. POST Request Handling: High-Speed Parallel Scraping Logic
     if (request.method === "POST" && url.pathname === "/scrape") {
-      try {
-        const formData = await request.formData();
-        const urlsInput = formData.get("urls");
+      const form = await request.formData();
+      const raw = String(form.get("urls") || "");
+      const inputs = raw.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+      if (!inputs.length) return json({ success: false, error: "No URLs provided" }, 400);
+      if (inputs.length > MAX_URLS) return json({ success: false, error: `Maximum ${MAX_URLS} URLs per batch` }, 429);
 
-        if (!urlsInput) {
-          return new Response(JSON.stringify({ success: false, error: "No URLs provided!" }), {
-            status: 400,
-            headers: { 
-              "Content-Type": "application/json",
-              "X-Powered-By": "pavnxet-scraper"
-            }
-          });
+      const results = await Promise.all(inputs.map(async input => {
+        const started = Date.now();
+        try {
+          const result = await resolveWithBrowser(input, env);
+          return { input, ...result, elapsedMs: Date.now() - started };
+        } catch (error) {
+          return { input, success: false, error: error.message, elapsedMs: Date.now() - started };
         }
+      }));
 
-        const urls = urlsInput
-          .split("\n")
-          .map(link => link.trim())
-          .filter(link => link.length > 0);
-
-        if (urls.length === 0) {
-          return new Response(JSON.stringify({ success: false, error: "No valid URLs found." }), {
-            status: 400,
-            headers: { "Content-Type": "application/json" }
-          });
-        }
-
-        if (urls.length > 30) {
-          return new Response(JSON.stringify({ success: false, error: "Rate limit exceeded: Maximum 30 URLs allowed per batch." }), {
-            status: 429,
-            headers: { "Content-Type": "application/json" }
-          });
-        }
-
-        const fetchPromises = urls.map(async (targetUrl) => {
-          if (!targetUrl.startsWith("https://")) {
-            return { type: 'error', msg: `❌ Rejected (Insecure Protocol): ${targetUrl}` };
-          }
-
-          if (!targetUrl.includes("fuckingfast.co")) {
-            return { type: 'error', msg: `❌ Rejected (Unsupported Domain): ${targetUrl}` };
-          }
-
-          try {
-            // 🔥 सुधार 1: URL से # (Hash/Fragment) को पूरी तरह हटाना ताकि सर्वर कंफ्यूज न हो
-            const cleanUrl = targetUrl.split('#')[0];
-
-            // Anti-Bot Advanced Bypassing Headers
-            const antiBotHeaders = {
-              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-              "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-              "Accept-Language": "en-US,en;q=0.9,hi;q=0.8",
-              "Cache-Control": "no-cache",
-              "Pragma": "no-cache",
-              "Referer": "https://fuckingfast.co/",
-              "Sec-Ch-Ua": '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
-              "Sec-Ch-Ua-Mobile": "?0",
-              "Sec-Ch-Ua-Platform": '"Windows"',
-              "Sec-Fetch-Dest": "document",
-              "Sec-Fetch-Mode": "navigate",
-              "Sec-Fetch-Site": "same-origin",
-              "Sec-Fetch-User": "?1",
-              "Upgrade-Insecure-Requests": "1"
-            };
-
-            // 🔥 सुधार 2: Cloudflare Advanced TLS & Browser Verification features को फाॅर्स करना
-            const response = await fetch(cleanUrl, { 
-              headers: antiBotHeaders,
-              redirect: "follow",
-              cf: {
-                cacheEverything: false,
-                scrapeShield: false,
-                minify: { javascript: false, css: false, html: false }
-              }
-            });
-            
-            if (response.status === 200) {
-              const pageSource = await response.text();
-              let directLink = null;
-
-              const match = pageSource.match(/window\.open\("(https:\/\/dl\.fuckingfast\.co\/dl\/[^"]+)"\)/);
-              if (match && match[1]) directLink = match[1];
-              
-              if (!directLink) {
-                const backupMatch = pageSource.match(/(https:\/\/dl\.fuckingfast\.co\/dl\/[^\s"'\>]+)/);
-                if (backupMatch && backupMatch[1]) directLink = backupMatch[1];
-              }
-
-              if (directLink) {
-                return { type: 'success', msg: directLink.replace(/[\s"'\>]+/g, '') };
-              } else {
-                return { type: 'error', msg: `⚠️ Direct link signature not found: ${targetUrl}` };
-              }
-            } else {
-              return { type: 'error', msg: `❌ HTTP Error ${response.status}: ${targetUrl}` };
-            }
-          } catch (e) {
-            return { type: 'error', msg: `❌ Network failure: ${e.message}` };
-          }
-        });
-
-        const results = await Promise.all(fetchPromises);
-        
-        const successLinks = results.filter(r => r.type === 'success').map(r => r.msg);
-        const errorLinks = results.filter(r => r.type === 'error').map(r => r.msg);
-
-        return new Response(JSON.stringify({ success: true, successLinks, errorLinks }), {
-          headers: { 
-            "Content-Type": "application/json",
-            "X-Data-Source": "pavnxet-engine"
-          }
-        });
-
-      } catch (err) {
-        return new Response(JSON.stringify({ success: false, error: "Internal Server Error" }), {
-          status: 500,
-          headers: { "Content-Type": "application/json" }
-        });
-      }
+      return json({ success: true, results, successLinks: results.filter(x => x.success).map(x => x.directLink), failures: results.filter(x => !x.success) });
     }
 
-    // 2. GET Request Handling: Premium UI Dashboard
-    const htmlUI = `
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>FuckingFast Worker Scraper Dashboard</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-        <style>
-            :root {
-                --bg-primary: #faf6f0;
-                --bg-surface: #ffffff;
-                --bg-inner: #f6efe5;
-                --bg-active: #f3ebe0;
-                --ink: #1e1a15;
-                --ink-muted: #6e655a;
-                --border-color: #e8ded0;
-                --accent: #b55d2b;
-                --success-ink: #1e4620;
-                --success-bg: #edf7ed;
-                --error-ink: #5f2120;
-                --error-bg: #fdeded;
-                --shadow-premium: 0 10px 30px -10px rgba(30, 26, 21, 0.05), 0 1px 3px rgba(30, 26, 21, 0.02);
-            }
-
-            body.dark-theme {
-                --bg-primary: #121212;
-                --bg-surface: #1e1e1e;
-                --bg-inner: #2a2a2a;
-                --bg-active: #333333;
-                --ink: #e8e6e3;
-                --ink-muted: #9e9a95;
-                --border-color: #383838;
-                --accent: #d97b45;
-                --success-ink: #81c784;
-                --success-bg: #1b3320;
-                --error-ink: #e57373;
-                --error-bg: #401919;
-                --shadow-premium: 0 10px 30px -10px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.3);
-            }
-
-            body {
-                background-color: var(--bg-primary);
-                color: var(--ink);
-                font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                min-height: 100vh;
-                display: flex;
-                flex-direction: column;
-                justify-content: space-between;
-                transition: background-color 0.3s, color 0.3s;
-            }
-
-            .premium-card {
-                background-color: var(--bg-surface);
-                border: 1px solid var(--border-color);
-                box-shadow: var(--shadow-premium);
-                transition: background-color 0.3s, border-color 0.3s, box-shadow 0.3s;
-            }
-
-            .inner-input {
-                background-color: var(--bg-inner);
-                border: 1px solid var(--border-color);
-                color: var(--ink);
-            }
-
-            .inner-input:focus {
-                border-color: var(--accent);
-                box-shadow: 0 0 0 3px rgba(181, 93, 43, 0.15);
-            }
-
-            .btn-accent {
-                background-color: var(--accent);
-                color: #ffffff;
-                transition: all 0.2s ease-in-out;
-            }
-
-            .btn-accent:hover { opacity: 0.9; transform: translateY(-1px); }
-            .btn-accent:active { opacity: 1; transform: translateY(0); }
-
-            .btn-secondary {
-                background-color: var(--bg-inner);
-                border: 1px solid var(--border-color);
-                color: var(--ink);
-                transition: all 0.2s;
-            }
-            .btn-secondary:hover { background-color: var(--bg-active); }
-
-            .terminal-success {
-                background-color: var(--success-bg);
-                border: 1px solid rgba(30, 70, 32, 0.12);
-                color: var(--success-ink);
-            }
-
-            .terminal-error {
-                background-color: var(--error-bg);
-                border: 1px solid rgba(95, 33, 32, 0.12);
-                color: var(--error-ink);
-            }
-
-            footer a { color: var(--ink-muted); transition: color 0.2s ease; }
-            footer a:hover { color: var(--accent); }
-
-            #progressContainer {
-                background-color: var(--bg-inner);
-                overflow: hidden;
-            }
-            #progressBar {
-                background-color: var(--accent);
-                transition: width 0.4s ease;
-            }
-        </style>
-    </head>
-    <body class="p-6 flex flex-col items-center justify-between min-h-screen">
-        <div class="w-full max-w-3xl p-8 rounded-2xl premium-card mt-8">
-            <div class="flex items-center justify-between mb-2">
-                <div class="flex items-center space-x-3">
-                    <h1 class="text-3xl font-extrabold tracking-tight" style="color: var(--ink);">
-                        ⚡ FuckingFast Scraper
-                    </h1>
-                    <span class="px-2 py-0.5 text-[10px] font-bold rounded border" style="background-color: var(--bg-inner); border-color: var(--border-color); color: var(--accent);">V3.5-RENAME</span>
-                </div>
-                <button onclick="toggleTheme()" class="p-2 rounded-lg btn-secondary text-sm font-bold" title="Toggle Theme">
-                    🌓
-                </button>
-            </div>
-            <p class="text-sm mb-6" style="color: var(--ink-muted);">Paste your batch links from FuckingFast.co. High-speed extraction with sequential pCloud mapping helper.</p>
-            
-            <form id="scraperForm" class="space-y-4">
-                <div>
-                    <div class="flex justify-between items-end mb-2">
-                        <label class="block text-sm font-semibold" style="color: var(--ink);">Input URLs (One per line):</label>
-                        <button type="button" onclick="pasteClipboard()" class="text-xs px-2 py-1 rounded btn-secondary font-semibold">
-                            📋 Paste
-                        </button>
-                    </div>
-                    <textarea 
-                        name="urls" 
-                        id="urls" 
-                        rows="7" 
-                        class="w-full p-4 rounded-xl text-sm focus:outline-none inner-input font-mono"
-                        placeholder="https://fuckingfast.co/..."
-                        required></textarea>
-                </div>
-                
-                <button 
-                    type="submit" 
-                    id="submitBtn"
-                    class="w-full py-3.5 px-4 rounded-xl font-semibold shadow-sm btn-accent relative overflow-hidden">
-                    <span>🚀 Launch Parallel Scraper</span>
-                </button>
-
-                <div id="progressContainer" class="w-full h-2 rounded-full hidden mt-2">
-                    <div id="progressBar" class="h-full w-0"></div>
-                </div>
-            </form>
-        </div>
-
-        <div id="outputContainer" class="w-full max-w-3xl space-y-4 mt-6 hidden">
-            <div id="successBox" class="p-6 rounded-2xl premium-card border-l-4 hidden" style="border-left-color: var(--accent);">
-                <div class="flex justify-between items-center mb-3">
-                    <h2 class="text-base font-bold flex items-center" style="color: var(--ink);">
-                        ✅ Pure Direct Links (<span id="successCount">0</span>)
-                    </h2>
-                    <div class="space-x-2">
-                        <button onclick="copyLinks('resultBox')" class="px-3 py-1 text-xs font-semibold rounded-lg btn-secondary">
-                            📋 Copy Links
-                        </button>
-                    </div>
-                </div>
-                <textarea id="resultBox" rows="5" class="w-full p-4 rounded-xl text-xs font-mono focus:outline-none terminal-success" readonly></textarea>
-                
-                <div class="mt-5 pt-4 border-t border-dashed" style="border-color: var(--border-color);">
-                    <div class="flex justify-between items-center mb-3">
-                        <h3 class="text-xs font-bold tracking-wider uppercase opacity-80" style="color: var(--ink);">
-                            📦 pCloud Rename Map Assistant (Sequence Order)
-                        </h3>
-                        <button onclick="copyLinks('renameMapBox')" class="px-2 py-0.5 text-[11px] font-semibold rounded btn-secondary">
-                            📋 Copy Rename Map
-                        </button>
-                    </div>
-                    <textarea id="renameMapBox" rows="5" class="w-full p-4 rounded-xl text-xs font-mono focus:outline-none terminal-success bg-opacity-40" placeholder="Mapping list will generate here..." readonly></textarea>
-                </div>
-            </div>
-
-            <div id="errorBox" class="p-6 rounded-2xl premium-card border-l-4 hidden" style="border-left-color: #d32f2f;">
-                <h2 class="text-base font-bold mb-3 flex items-center" style="color: #d32f2f;">
-                    ⚠️ Failed Signatures (<span id="errorCount">0</span>)
-                </h2>
-                <textarea id="errResultBox" rows="4" class="w-full p-4 rounded-xl text-xs font-mono focus:outline-none terminal-error" readonly></textarea>
-            </div>
-        </div>
-
-        <footer class="mt-12 mb-6 text-sm">
-            <a href="https://pavnxet.github.io/" target="_blank" rel="noopener noreferrer" class="flex items-center space-x-1">
-                <span>Made with 💖 by</span>
-                <span class="font-bold underline tracking-wide" style="color: var(--accent);">pavnxet</span>
-            </a>
-        </footer>
-
-        <script>
-            function toggleTheme() {
-                document.body.classList.toggle('dark-theme');
-            }
-
-            async function pasteClipboard() {
-                try {
-                    const text = await navigator.clipboard.readText();
-                    document.getElementById('urls').value = text;
-                } catch (err) {
-                    alert('❌ Clipboard access denied. Please paste manually.');
-                }
-            }
-
-            function copyLinks(boxId) {
-                const box = document.getElementById(boxId);
-                box.select();
-                document.execCommand('copy');
-                alert('📋 Copied securely to system clipboard!');
-            }
-
-            document.getElementById('scraperForm').addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const submitBtn = document.getElementById('submitBtn');
-                const outputContainer = document.getElementById('outputContainer');
-                const successBox = document.getElementById('successBox');
-                const errorBox = document.getElementById('errorBox');
-                const progressContainer = document.getElementById('progressContainer');
-                const progressBar = document.getElementById('progressBar');
-                
-                submitBtn.disabled = true;
-                submitBtn.querySelector('span').innerHTML = "⏳ Sorting Sequences Parallelly...";
-                
-                outputContainer.classList.add('hidden');
-                successBox.classList.add('hidden');
-                errorBox.classList.add('hidden');
-                
-                progressContainer.classList.remove('hidden');
-                progressBar.style.width = '10%';
-                
-                let progressInterval = setInterval(() => {
-                    let currentWidth = parseInt(progressBar.style.width);
-                    if (currentWidth < 90) {
-                        progressBar.style.width = (currentWidth + 5) + '%';
-                    }
-                }, 400);
-
-                try {
-                    const res = await fetch('/scrape', {
-                        method: 'POST',
-                        body: new FormData(e.target)
-                    });
-                    
-                    clearInterval(progressInterval);
-                    progressBar.style.width = '100%';
-                    
-                    if(res.status === 401) {
-                        window.location.href = '/login';
-                        return;
-                    }
-
-                    if(res.status === 500) {
-                        alert("❌ Server Runtime Error triggered.");
-                        return;
-                    }
-                    
-                    const data = await res.json();
-
-                    setTimeout(() => {
-                        progressContainer.classList.add('hidden');
-                        progressBar.style.width = '0%';
-                        if (data.success) {
-                            outputContainer.classList.remove('hidden');
-                            
-                            if (data.successLinks.length > 0) {
-                                successBox.classList.remove('hidden');
-                                document.getElementById('successCount').innerText = data.successLinks.length;
-                                
-                                // Set Raw Links
-                                document.getElementById('resultBox').value = data.successLinks.join('\\n');
-                                
-                                // Process and build the pCloud Renaming Assistant Text safely escaped
-                                const mappingLines = data.successLinks.map((link, index) => {
-                                    const partNum = String(index + 1).padStart(2, '0');
-                                    const fileHash = link.substring(link.lastIndexOf('/') + 1);
-                                    return "Part_" + partNum + "  ==>  " + fileHash;
-                                });
-                                document.getElementById('renameMapBox').value = mappingLines.join('\\n');
-                            }
-                            
-                            if (data.errorLinks.length > 0) {
-                                errorBox.classList.remove('hidden');
-                                document.getElementById('errorCount').innerText = data.errorLinks.length;
-                                document.getElementById('errResultBox').value = data.errorLinks.join('\\n');
-                            }
-                        } else {
-                            alert("❌ Halted: " + data.error);
-                        }
-                    }, 400);
-
-                } catch (err) {
-                    clearInterval(progressInterval);
-                    progressContainer.classList.add('hidden');
-                    progressBar.style.width = '0%';
-                    alert("❌ Exception: " + err.message);
-                } finally {
-                    submitBtn.disabled = false;
-                    submitBtn.querySelector('span').innerText = "🚀 Launch Parallel Scraper";
-                }
-            });
-        </script>
-    </body>
-    </html>
-    `;
-
-    return new Response(htmlUI, {
-      headers: { 
-        "Content-Type": "text/html; charset=utf-8",
-        "Cache-Control": "no-store",
-        "X-Content-Type-Options": "nosniff",
-        "X-Frame-Options": "DENY",
-        "X-XSS-Protection": "1; mode=block"
-      }
-    });
+    return dashboard();
   }
 };
