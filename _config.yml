@@ -1,0 +1,12 @@
+# GitHub Pages configuration
+# Keep development/agent documentation out of Jekyll processing.
+# This prevents Liquid from interpreting template syntax inside Markdown files.
+exclude:
+  - Superpowers
+  - AGENTS.md
+  - AUTH_SETUP.md
+  - package.json
+  - package-lock.json
+  - worker.js
+  - wrangler.toml
+  - scraper.py
